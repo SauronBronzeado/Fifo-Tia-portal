@@ -1,0 +1,80 @@
+﻿FUNCTION_BLOCK "FIFO"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      In_Value : UInt;
+      Cmd_Load : Bool;
+      Cmd_Unload : Bool;
+      Cmd_Clear : Bool;
+   END_VAR
+
+   VAR_OUTPUT 
+      Out_Value : UInt;
+   END_VAR
+
+   VAR_IN_OUT 
+      Buffer : Array[0..50] of UInt;
+   END_VAR
+
+   VAR 
+      RiseTriggerLoad {InstructionName := 'R_TRIG'; LibVersion := '1.0'} : R_TRIG;
+      RiseTriggerUnload {InstructionName := 'R_TRIG'; LibVersion := '1.0'} : R_TRIG;
+   END_VAR
+
+   VAR_TEMP 
+      ActualPosition : Int;
+      PreviusPosition : Int;
+   END_VAR
+
+   VAR CONSTANT 
+      "Null" : UInt := 0;
+   END_VAR
+
+
+BEGIN
+	REGION Triggers
+	    #RiseTriggerLoad(CLK := #Cmd_Load,
+	                     Q => #RiseTriggerLoad.Q);
+	    
+	    #RiseTriggerUnload(CLK := #Cmd_Unload,
+	                       Q => #RiseTriggerUnload.Q);
+	END_REGION
+	
+	REGION Load value
+	    IF #RiseTriggerLoad.Q AND #Buffer[50] = #Null THEN
+	        #Buffer[50] := #In_Value;                   // move Value_in to last position of buffer
+	    END_IF;
+	END_REGION
+	
+	REGION Unload Data
+	    IF #RiseTriggerUnload.Q AND #Buffer[0] <> #Null THEN
+	        #Buffer[0] := #Null;
+	    END_IF;
+	END_REGION
+	
+	REGION Shift data
+	    IF NOT #RiseTriggerLoad.Q AND NOT #RiseTriggerUnload.Q AND NOT #Cmd_Clear THEN
+	        FOR #ActualPosition := 0 TO 49 DO
+	            #PreviusPosition := #ActualPosition + 1;
+	            IF #Buffer[#ActualPosition] = #Null AND #Buffer[#PreviusPosition] <> #Null THEN
+	                #Buffer[#ActualPosition] := #Buffer[#PreviusPosition];
+	                #Buffer[#PreviusPosition] := #Null;
+	            END_IF;
+	        END_FOR;
+	    END_IF;
+	END_REGION
+	
+	REGION Clear #Buffer
+	    IF #Cmd_Clear THEN
+	        FOR #ActualPosition := 0 TO 50 DO
+	            #Buffer[#ActualPosition] := #Null;
+	        END_FOR;
+	    END_IF;
+	END_REGION
+	
+	REGION Out Value
+	    #Out_Value := #Buffer[0];
+	END_REGION
+	
+END_FUNCTION_BLOCK
+
